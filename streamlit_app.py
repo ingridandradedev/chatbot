@@ -1,56 +1,71 @@
 import streamlit as st
-from openai import OpenAI
+import requests
 
-# Show title and description.
-st.title("💬 Chatbot")
-st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
-)
+st.title("📄 Smart Doc Assistant")
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+"""
+Olá! Eu sou o Smart Doc Assistant, seu assistente inteligente para consultas e resumos de documentos. 
+Envie suas perguntas e eu ajudo a encontrar as respostas nos documentos com rapidez e precisão.
+"""
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# Inicializar o estado da sessão para armazenar o histórico de conversas
+if "messages" not in st.session_state:
+    st.session_state["messages"] = [{"role": "assistant", "content": "Olá! Como posso ajudar com seus documentos hoje?"}]
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+# Exibir mensagens de chat do histórico da sessão
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# Aceitar entrada do usuário
+if prompt := st.chat_input("Digite uma mensagem para o assistente:"):
+    # Adicionar a mensagem do usuário ao histórico
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+    # Enviar solicitação para a API do Langflow atualizada
+    try:
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer sk-0EDDDAlNjRscbzqGZtDVsalsBvW52niFZ_2qfpQn-Xk"
+        }
+        data = {
+            "input_value": prompt,
+            "output_type": "chat",
+            "input_type": "chat",
+            "tweaks": {
+                "Pinecone-QMd60": {},
+                "SplitText-DWvkT": {},
+                "Pinecone-1lgJh": {},
+                "ChatInput-TYjSN": {},
+                "OpenAIEmbeddings-37WE4": {},
+                "ParseData-x968k": {},
+                "Prompt-qc1TI": {},
+                "OpenAIModel-bygbe": {},
+                "ChatOutput-TRRVE": {},
+                "FirecrawlScrapeApi-Uptho": {},
+                "OpenAIEmbeddings-i3XBn": {},
+                "File-qpDFS": {}
+            }
+        }
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
+        response = requests.post(
+            "https://langflowailangflowlatest-production-74ad.up.railway.app/api/v1/run/45e1b28f-4574-43c7-99f9-98a1b248d423?stream=false",
+            headers=headers,
+            json=data
         )
+        response_data = response.json()
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
+        # Extrair a resposta do assistente
+        assistant_message = response_data["outputs"][0]["outputs"][0]["results"]["message"]["data"]["text"]
+
+        # Exibir mensagem do assistente no chat
         with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+            st.markdown(assistant_message)
+
+        # Adicionar mensagem do assistente ao histórico de conversas
+        st.session_state.messages.append({"role": "assistant", "content": assistant_message})
+
+    except Exception as e:
+        st.error(f"Erro: {e}")
